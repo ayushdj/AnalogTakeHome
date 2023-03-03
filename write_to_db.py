@@ -5,10 +5,10 @@ from pymongo import MongoClient
 import argparse
 
 
-class WriteToDatabase:
+class CommunicateWithDatabase:
     """ constructor """
 
-    def __init__(self, all_usernames_string):
+    def __init__(self):
         # create a client to connect to the database
         self.client = MongoClient(
             "mongodb+srv://dhananjai:eD68qSmbQO7A235T@cluster0.3layqrx.mongodb.net/github?retryWrites=true&w=majority",
@@ -21,7 +21,7 @@ class WriteToDatabase:
         self.collection = self.db.user_repos
 
         # parse the usernames
-        self.usernames = all_usernames_string.split(",")
+        self.usernames = []
 
         # The base URL for the API that extracts the repositories for a particular user
         self.base_github_api_url = "https://api.github.com/users/"
@@ -47,31 +47,58 @@ class WriteToDatabase:
                     # Here we are checking to see if the data doesn't exist in the database. If it doesn't exist,
                     # then it is a new entry in our collection. Else, we must update the repositories list for the
                     # existing user
-                    if self.collection.find_one({"user_name": current_username}) is None:
-                        current_user_data = {'user_name': current_username, 'all_repo_names': repositories}
+                    does_not_exist, actual_username_data = self.is_username_in_database(current_username)
+                    if does_not_exist:
+                        current_user_data = {'username': current_username, 'all_repo_names': repositories}
                         self.collection.insert_one(current_user_data)
                         print("Inserted new data for username = " + current_username)
 
                     else:
                         # update the existing username's "all_repo_names" field with the new set of repositories.
                         new_repository_names = {"$set": {'all_repo_names': repositories}}
-                        self.collection.update_one({"user_name": current_username}, new_repository_names)
+                        self.collection.update_one({"username": current_username}, new_repository_names)
                         print("Updated repository names for username = " + current_username)
                 else:
                     print("Unable to insert data for: " + current_username)
             except Exception as e:
                 print("An error occurred when trying to insert data. Please try again.")
 
+    """
+        A setter method to set the usernames class variable to a new set of usernames that come in string format.
+    """
 
-def main(args):
+    def set_usernames(self, all_usernames_string):
+        self.usernames = all_usernames_string.split(",")
+
+    """
+        A setter method to set the usernames class variable to a new array.
+    """
+
+    def set_username_list(self, new_usernames_list):
+        self.usernames = new_usernames_list
+
+    """
+        A helper method to determine if a username is in the database
+    """
+
+    def is_username_in_database(self, username):
+        does_not_exist = self.collection.find_one({"username": username}) is None
+        return does_not_exist, self.collection.find_one({"username": username}, {'_id': False})
+
+
+def main(username_string):
     # create an instance of the class
-    database_instance = WriteToDatabase(args)
+    database_instance = CommunicateWithDatabase()
+
+    # set the usernames
+    database_instance.set_usernames(username_string)
 
     # populate the database with the repository names for all users, old and new
     database_instance.populate_database()
 
 
 if __name__ == '__main__':
+    # Parse the command line arguments
     parser = argparse.ArgumentParser(prog='Write to DB')
     parser.add_argument('usernames', type=str)
     args = parser.parse_args()
